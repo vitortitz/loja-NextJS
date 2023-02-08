@@ -1,30 +1,100 @@
 import { useState } from 'react'
 import { Layout, Input } from 'components'
-import { HtmlHTMLAttributes } from 'react'
+import { useProdutoService } from 'app/services'
+import { Produto } from 'app/models/produtos'
+import { converterEmBigDecimal } from 'app/util/money'
+import { Message } from 'components/common/message'
+import { Alert } from 'components/common/message'
+import { object, string, number, date, InferType, array } from 'yup';
+
+
+
+const msgObrigatoria = '*Campo Obrigatório'
+const msgValor = '*PREÇO deve ser maior que 0'
+const validationSchame = object({
+
+
+    nome: string().trim().required(msgObrigatoria),
+    precocusto: number().moreThan(0, msgValor).required(),
+    precovenda: number().moreThan(0, msgValor).required(),
+    quantidades: array(number().moreThan(0, msgValor).required()),
+    sku: string().trim().required(msgObrigatoria),
+})
+
+interface FormErros {
+    sku?: string,
+    precocusto?: string,
+    precovenda?: string,
+    nome?: string
+    quantidades?: string
+}
+
+
+
+
 export const CadastroProdutos: React.FC = () => {
 
-    const [sku, setSku] = useState('')
-    const [precoCusto, setPrecoCusto] = useState('')
-    const [nome, setNome] = useState('')
-    const [precoVenda, setPrecoVenda] = useState('')
-    const [tamanhos, setTamanhos] = useState([])
-    const [quantidades, setQuantidades] = useState([])
+    const service = useProdutoService()
+    const [sku, setSku] = useState<string>('')
+    const [precocusto, setprecocusto] = useState<string>('')
+    const [nome, setNome] = useState<string>('')
+    const [precovenda, setprecovenda] = useState<string>('')
+    const [tamanhos, setTamanhos] = useState(['RN'])
+    const [quantidades, setQuantidades] = useState(['0'])
     const [isDisabled, setDisable] = useState(false)
-
-
+    const [id, setId] = useState<string>('')
+    const [message, setMessage] = useState<Array<Alert>>([])
+    const [errors, setErrors] = useState<FormErros>({})
 
     const submit = () => {
-        const produto = {
-            nome, sku, precoCusto, precoVenda, tamanhos, quantidades
+        const produto: Produto = {
+            id,
+            nome,
+            sku,
+            precocusto: converterEmBigDecimal(precocusto),
+            precovenda: converterEmBigDecimal(precovenda),
+            tamanhos,
+            quantidades
         }
-        console.log(produto)
+
+        validationSchame.validate(produto).then(obj => {
+            setErrors({})
+            if (id) {
+                service.atualizar(produto).then(response => {
+                    setMessage([{
+                        tipo: "success", texto: "Produto atualizado com sucesso!"
+                    }])
+                })
+            } else {
+                service.salvar(produto).then(produtoResposta => {
+                    setId(produtoResposta.id)
+                    console.log(produtoResposta)
+                    setMessage([{
+                        tipo: "success", texto: "Produto salvo com sucesso!"
+
+                    }])
+                })
+            }
+
+        }).catch(err => {
+            const field = err.path
+            const message = err.message
+
+            setErrors({
+                [field]: message
+            })
+
+        })
+
+
     }
 
     const addInputButton = (e) => {
         e.preventDefault()
         if (tamanhos.length <= 4) {
-            setTamanhos([...tamanhos, ""]);
-            setQuantidades([...quantidades, ""])
+            setTamanhos([...tamanhos, "RN"]);
+            setQuantidades([...quantidades, "0"])
+            console.log(tamanhos.length)
             if (tamanhos.length >= 4) {
                 setDisable(true)
             }
@@ -48,34 +118,44 @@ export const CadastroProdutos: React.FC = () => {
     const handleRemoveInput = (position) => {
         setTamanhos([...tamanhos.filter((_, index) => index != position)])
         setQuantidades([...quantidades.filter((_, index) => index != position)])
+        setDisable(false)
     }
 
     return (
 
-        <Layout titulo="Produtos">
+        <Layout titulo="Produtos" mensagens={message}>
             <div className='columns'>
-
                 <Input label='Nome do produto: *'
                     columnClasses="is-full" onChange={setNome}
                     value={nome} id='inputNome'
-                    placeholder='Digite o nome do produto'></Input>
+                    placeholder='Digite o nome do produto'
+                    error={errors.nome}></Input>
             </div>
             <div className='columns'>
+                {id &&
+                    <Input label='Código do Produto: *'
+                        columnClasses="is-one-fifth"
+                        value={id} id='inputId' disabled />
 
-                <Input label='Código do Produto: *'
+                }
+
+                <Input label='SKU: *'
                     columnClasses="is-one-quarter" onChange={setSku}
                     value={sku} id='inputSku'
-                    placeholder='Digite o Código'></Input>
+                    placeholder='Digite o Código'
+                    error={errors.sku} />
 
                 <Input label='Preço de Custo: *'
-                    columnClasses="is-one-quarter" onChange={setPrecoCusto}
-                    value={precoCusto} id='inputPrecoCusto'
-                    placeholder='Digite o preço de custo do produto'></Input>
+                    columnClasses="is-one-quarter" onChange={setprecocusto}
+                    value={precocusto} id='inputprecocusto'
+                    placeholder='Digite o preço de custo do produto' currency
+                    error={errors.precocusto} />
 
                 <Input label='Preço de Venda: *'
-                    columnClasses="is-one-quarter" onChange={setPrecoVenda}
-                    value={precoVenda} id='inputPrecoVenda'
-                    placeholder='Digite o preço de venda do produto'></Input>
+                    columnClasses="is-one-quarter" onChange={setprecovenda}
+                    value={precovenda} id='inputprecovenda' currency
+                    placeholder='Digite o preço de venda do produto'
+                    error={errors.precovenda} />
             </div>
             <div className='columns '>
                 {
@@ -89,14 +169,17 @@ export const CadastroProdutos: React.FC = () => {
                                         value={tamanho}
                                         onChange={event => handleChangeTamanho(event, index)}
                                     >
-                                        <option>RN</option>
-                                        <option>P</option>
-                                        <option>M</option>
-                                        <option>G</option>
+                                        <option value={'RN'}>RN</option>
+                                        <option value={'P'}>P</option>
+                                        <option value={'M'}>M</option>
+                                        <option value={'G'}>G</option>
                                     </select>
                                 </div>
-                                <button className='button is-danger'
-                                    onClick={() => { handleRemoveInput(index) }}>Deletar</button>
+                                {
+                                    tamanhos.length > 1 && <button className='button is-danger'
+                                        onClick={() => { handleRemoveInput(index) }}>Deletar</button>
+                                }
+
                             </div>
                         </div>
                     ))
@@ -113,6 +196,10 @@ export const CadastroProdutos: React.FC = () => {
                                     value={quantidade}
                                     id='{`quantidade ${index}`}' onChange={event => handleChangeQuantidade(event, index)}
                                     type="number" placeholder={`Quantidade ${index + 1}:`} />
+                                {errors &&
+                                    <p className='help is-danger'>
+                                        {errors.quantidades}
+                                    </p>}
                             </div>
 
                         </div>
@@ -134,7 +221,7 @@ export const CadastroProdutos: React.FC = () => {
                     <button className='button is-warning'>Voltar</button>
                 </div>
                 <div className='control'>
-                    <button className='button is-primary' onClick={submit}>Salvar</button>
+                    <button className='button is-primary' onClick={submit}>{id ? "Atualiazar" : "Salvar"}</button>
                 </div>
             </div>
         </Layout>
